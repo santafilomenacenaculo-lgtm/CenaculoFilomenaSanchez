@@ -1,0 +1,32 @@
+{
+  "name": "Cenáculo de Crisma",
+  "short_name": "Cenáculo",
+  "description": "Comunidade de Crisma — Sta. Filomena & S. José Sánchez del Río",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#121417",
+  "theme_color": "#8B1E2D",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/santos_padroeiros.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
