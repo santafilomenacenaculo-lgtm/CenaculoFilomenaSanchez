@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Camera, Check, Loader2, Mail, User, ShieldCheck } from 'lucide-react';
+import { getUserRole, ROLES } from '../utils/roles';
+import { Camera, Check, Loader2, Mail, User, ShieldCheck, Crown, Flame, Eye } from 'lucide-react';
 
-export default function ProfileView({ profile, onProfileUpdated }) {
+export default function ProfileView({ profile, user, onProfileUpdated }) {
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || '');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const currentRole = getUserRole(user, profile);
 
   // Sincroniza dados caso o perfil seja carregado assincronamente
   useEffect(() => {
@@ -61,7 +64,6 @@ export default function ProfileView({ profile, onProfileUpdated }) {
         id: profile?.id,
         display_name: displayName,
         avatar_url: avatarUrl,
-        updated_at: new Date().toISOString(),
       };
 
       const { error } = await supabase
@@ -85,11 +87,58 @@ export default function ProfileView({ profile, onProfileUpdated }) {
       <div className="text-center mb-6">
         <h2 className="text-xl font-bold text-cenaculo-crimson dark:text-cenaculo-gold flex items-center justify-center gap-2">
           <ShieldCheck className="w-5 h-5 text-cenaculo-gold" />
-          Perfil do Crismando
+          Perfil do Discípulo
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Identificação na comunidade de Santa Filomena & São José Sánchez
         </p>
+
+        {/* Card de Status da Classe / Cargo */}
+        <div className="mt-4 p-3.5 rounded-2xl inline-flex items-center gap-3 border shadow-xs max-w-sm text-left">
+          {currentRole === ROLES.PROFETA ? (
+            <>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
+                  Cargo: Profeta (Superusuário)
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Acesso total e gestão exclusiva de todos os discípulos.
+                </span>
+              </div>
+            </>
+          ) : currentRole === ROLES.FILOMENO ? (
+            <>
+              <div className="w-9 h-9 rounded-xl bg-cenaculo-crimson/15 dark:bg-cenaculo-gold/20 text-cenaculo-crimson dark:text-cenaculo-gold flex items-center justify-center shrink-0">
+                <Flame className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-cenaculo-crimson dark:text-cenaculo-gold uppercase tracking-wider block">
+                  Classe: Filomeno (Membro Pleno)
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Acesso liberado a todos os encontros, presenças e publicações.
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center shrink-0">
+                <Eye className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                  Classe: Pagão (Acesso Leitura)
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Apenas visualização do Mural. Aguarde bênção do Profeta.
+                </span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">

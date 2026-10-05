@@ -4,6 +4,17 @@ import HomeView from './components/HomeView';
 import ProfileView from './components/ProfileView';
 import MeetingsView from './components/MeetingsView';
 import FeedView from './components/FeedView';
+import UsersManagementView from './components/UsersManagementView';
+import { 
+  getUserRole, 
+  isProfeta, 
+  isFilomeno, 
+  isPagao, 
+  canInteract, 
+  canManageUsers, 
+  ROLES, 
+  SUPERUSER_EMAIL 
+} from './utils/roles';
 import { 
   Home,
   CalendarDays, 
@@ -14,7 +25,11 @@ import {
   Flame, 
   Cross, 
   LogOut, 
-  LogIn 
+  LogIn,
+  Crown,
+  Eye,
+  Users,
+  Lock
 } from 'lucide-react';
 
 export default function App() {
@@ -27,12 +42,12 @@ export default function App() {
     return localStorage.getItem('cenaculo_theme') === 'dark';
   });
 
-  // Aba ativa: 'inicio' | 'encontros' | 'feed' | 'perfil' (com suporte a link direto ?tab=...)
+  // Aba ativa: 'inicio' | 'encontros' | 'feed' | 'perfil' | 'usuarios'
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (['inicio', 'encontros', 'feed', 'perfil'].includes(tabParam)) {
+      if (['inicio', 'encontros', 'feed', 'perfil', 'usuarios'].includes(tabParam)) {
         return tabParam;
       }
     } catch (e) {
@@ -41,6 +56,7 @@ export default function App() {
     return 'inicio';
   });
 
+  // Aplica classe dark mode
   useEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
@@ -56,13 +72,13 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user);
+      if (session?.user) syncAndFetchProfile(session.user);
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user);
+      if (session?.user) syncAndFetchProfile(session.user);
       else setProfile(null);
       setLoading(false);
     });
@@ -70,23 +86,87 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userOrId) => {
-    const userId = typeof userOrId === 'object' ? userOrId.id : userOrId;
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+  /**
+   * Sincroniza e busca o perfil do usuário.
+   * Se for novo cadastro, salva na tabela profiles com role 'Pagão' (ou 'Profeta' se for rap.rag@gmail.com).
+   */
+  const syncAndFetchProfile = async (userObj) => {
+    if (!userObj) return;
 
-    if (!error && data) {
-      setProfile(data);
-    } else if (typeof userOrId === 'object' && userOrId.id) {
-      setProfile({
-        id: userOrId.id,
-        email: userOrId.email,
-        display_name: userOrId.user_metadata?.full_name || userOrId.user_metadata?.name || userOrId.email?.split('@')[0] || 'Crismando',
-        avatar_url: userOrId.user_metadata?.avatar_url || userOrId.user_metadata?.picture || '',
-      });
+    const email = (userObj.email || '').toLowerCase().trim();
+    const isSuper = email === SUPERUSER_EMAIL;
+    const defaultRole = isSuper ? ROLES.PROFETA : ROLES.PAGAO;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userObj.id)
+        .single();
+
+      if (!error && data) {
+        // Se o usuário já existe na tabela
+        const effectiveRole = isSuper ? ROLES.PROFETA : (data.role || ROLES.PAGAO);
+        const resolvedProfile = {
+          ...data,
+          role: effectiveRole,
+        };
+        setProfile(resolvedProfile);
+
+        // Se a role no banco estiver desatualizada, tenta atualizar
+        if (data.role !== effectiveRole) {
+          supabase
+            .from('profiles')
+            .update({ role: effectiveRole })
+            .eq('id', userObj.id)
+            .then(() => {});
+        }
+      } else {
+        // Usuário novo! Cria registro inicial na tabela profiles
+        const displayName = 
+          userObj.user_metadata?.full_name || 
+          userObj.user_metadata?.name || 
+          email.split('@')[0] || 
+          'Crismando';
+        const avatarUrl = 
+          userObj.user_metadata?.avatar_url || 
+          userObj.user_metadata?.picture || 
+          '';
+
+        const initialData = {
+          id: userObj.id,
+          email: userObj.email,
+          display_name: displayName,
+          avatar_url: avatarUrl,
+          role: defaultRole,
+        };
+
+        // Tenta cadastrar com coluna role
+        const { data: created, error: insertErr } = await supabase
+          .from('profiles')
+          .upsert(initialData, { onConflict: 'id' })
+          .select()
+          .single();
+
+        if (!insertErr && created) {
+          setProfile(created);
+        } else {
+          // Fallback caso a coluna role ainda não tenha sido criada no Supabase
+          const safeData = {
+            id: userObj.id,
+            email: userObj.email,
+            display_name: displayName,
+            avatar_url: avatarUrl,
+          };
+          await supabase.from('profiles').upsert(safeData, { onConflict: 'id' });
+          setProfile({
+            ...safeData,
+            role: defaultRole,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar perfil do usuário:', err);
     }
   };
 
@@ -102,6 +182,25 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  // Papéis e permissões calculadas
+  const userRole = getUserRole(session?.user, profile);
+  const isUserProfeta = userRole === ROLES.PROFETA;
+  const isUserFilomeno = userRole === ROLES.FILOMENO;
+  const isUserPagao = userRole === ROLES.PAGAO;
+
+  // Regra de Redirecionamento:
+  // - Usuário Pagão SÓ pode ver o Mural e Perfil
+  // - Não-profetas NUNCA podem ver a aba 'usuarios'
+  useEffect(() => {
+    if (!profile && !session?.user) return;
+
+    if (isUserPagao && activeTab !== 'feed' && activeTab !== 'perfil') {
+      setActiveTab('feed');
+    } else if (!isUserProfeta && activeTab === 'usuarios') {
+      setActiveTab(isUserPagao ? 'feed' : 'inicio');
+    }
+  }, [profile, isUserPagao, isUserProfeta, activeTab, session?.user]);
 
   if (loading) {
     return (
@@ -174,7 +273,7 @@ export default function App() {
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           
           <div 
-            onClick={() => setActiveTab('inicio')}
+            onClick={() => setActiveTab(isUserPagao ? 'feed' : 'inicio')}
             className="flex items-center gap-3 cursor-pointer select-none"
           >
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cenaculo-crimson to-cenaculo-gold flex items-center justify-center text-white shadow-md shadow-cenaculo-crimson/20">
@@ -185,35 +284,63 @@ export default function App() {
                 Cenáculo
                 <Flame className="w-4 h-4 text-amber-500 fill-amber-500 animate-pulse" />
               </h1>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider">
-                Olá, {profile?.display_name?.split(' ')[0] || 'Crismando'}
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider">
+                  Olá, {profile?.display_name?.split(' ')[0] || 'Crismando'}
+                </span>
+                
+                {/* Badge de Classe no Header */}
+                {isUserProfeta ? (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                    <Crown className="w-2.5 h-2.5 text-amber-500" />
+                    Profeta
+                  </span>
+                ) : isUserFilomeno ? (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-rose-500/15 text-cenaculo-crimson dark:text-cenaculo-gold border border-cenaculo-crimson/20">
+                    <Flame className="w-2.5 h-2.5 text-cenaculo-gold" />
+                    Filomeno
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                    <Eye className="w-2.5 h-2.5 text-slate-400" />
+                    Pagão
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Navegação Desktop */}
             <nav className="hidden md:flex items-center gap-1 mr-4">
-              <button 
-                onClick={() => setActiveTab('inicio')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                  activeTab === 'inicio' 
-                    ? 'bg-cenaculo-crimson text-white dark:bg-cenaculo-gold dark:text-slate-950 shadow-sm' 
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                Início
-              </button>
-              <button 
-                onClick={() => setActiveTab('encontros')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                  activeTab === 'encontros' 
-                    ? 'bg-cenaculo-crimson text-white dark:bg-cenaculo-gold dark:text-slate-950 shadow-sm' 
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                Encontros
-              </button>
+              
+              {/* Início e Encontros: Liberados apenas para Filomenos e Profeta */}
+              {!isUserPagao && (
+                <>
+                  <button 
+                    onClick={() => setActiveTab('inicio')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                      activeTab === 'inicio' 
+                        ? 'bg-cenaculo-crimson text-white dark:bg-cenaculo-gold dark:text-slate-950 shadow-sm' 
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    Início
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('encontros')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                      activeTab === 'encontros' 
+                        ? 'bg-cenaculo-crimson text-white dark:bg-cenaculo-gold dark:text-slate-950 shadow-sm' 
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    Encontros
+                  </button>
+                </>
+              )}
+
+              {/* Mural: Visível para TODOS (Pagão, Filomeno e Profeta) */}
               <button 
                 onClick={() => setActiveTab('feed')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
@@ -224,6 +351,22 @@ export default function App() {
               >
                 Mural / Mídia
               </button>
+
+              {/* Aba Exclusiva do Superusuário Profeta: Gestão de Discípulos */}
+              {isUserProfeta && (
+                <button 
+                  onClick={() => setActiveTab('usuarios')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'usuarios' 
+                      ? 'bg-amber-500 text-slate-950 shadow-sm' 
+                      : 'text-amber-700 dark:text-amber-400 hover:bg-amber-500/10'
+                  }`}
+                >
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  Gestão de Irmãos
+                </button>
+              )}
+
               <button 
                 onClick={() => setActiveTab('perfil')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
@@ -259,7 +402,7 @@ export default function App() {
 
       {/* Conteúdo */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 pb-24 md:pb-8">
-        {activeTab === 'inicio' && (
+        {activeTab === 'inicio' && !isUserPagao && (
           <HomeView 
             user={session?.user} 
             profile={profile} 
@@ -267,7 +410,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'encontros' && (
+        {activeTab === 'encontros' && !isUserPagao && (
           <MeetingsView 
             user={session?.user} 
             profile={profile} 
@@ -281,39 +424,51 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'usuarios' && isUserProfeta && (
+          <UsersManagementView 
+            user={session?.user} 
+            profile={profile} 
+          />
+        )}
+
         {activeTab === 'perfil' && (
           <ProfileView 
             profile={profile} 
-            onProfileUpdated={() => session?.user && fetchProfile(session.user)} 
+            user={session?.user}
+            onProfileUpdated={() => session?.user && syncAndFetchProfile(session.user)} 
           />
         )}
       </main>
 
       {/* Navegação Mobile Dock */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1A1D21]/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 z-40 px-4 py-2 flex justify-around items-center shadow-lg">
-        <button
-          onClick={() => setActiveTab('inicio')}
-          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
-            activeTab === 'inicio' 
-              ? 'text-cenaculo-crimson dark:text-cenaculo-gold font-bold' 
-              : 'text-slate-400'
-          }`}
-        >
-          <Home className="w-5 h-5" />
-          <span className="text-[11px]">Início</span>
-        </button>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1A1D21]/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 z-40 px-3 py-2 flex justify-around items-center shadow-lg">
+        {!isUserPagao && (
+          <>
+            <button
+              onClick={() => setActiveTab('inicio')}
+              className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                activeTab === 'inicio' 
+                  ? 'text-cenaculo-crimson dark:text-cenaculo-gold font-bold' 
+                  : 'text-slate-400'
+              }`}
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-[10px]">Início</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('encontros')}
-          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
-            activeTab === 'encontros' 
-              ? 'text-cenaculo-crimson dark:text-cenaculo-gold font-bold' 
-              : 'text-slate-400'
-          }`}
-        >
-          <CalendarDays className="w-5 h-5" />
-          <span className="text-[11px]">Encontros</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('encontros')}
+              className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+                activeTab === 'encontros' 
+                  ? 'text-cenaculo-crimson dark:text-cenaculo-gold font-bold' 
+                  : 'text-slate-400'
+              }`}
+            >
+              <CalendarDays className="w-5 h-5" />
+              <span className="text-[10px]">Encontros</span>
+            </button>
+          </>
+        )}
 
         <button
           onClick={() => setActiveTab('feed')}
@@ -324,8 +479,23 @@ export default function App() {
           }`}
         >
           <ImageIcon className="w-5 h-5" />
-          <span className="text-[11px]">Mural</span>
+          <span className="text-[10px]">Mural</span>
         </button>
+
+        {/* Gestão Mobile (Apenas Profeta) */}
+        {isUserProfeta && (
+          <button
+            onClick={() => setActiveTab('usuarios')}
+            className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+              activeTab === 'usuarios' 
+                ? 'text-amber-500 font-bold' 
+                : 'text-amber-600/70 dark:text-amber-400/70'
+            }`}
+          >
+            <Crown className="w-5 h-5 text-amber-500" />
+            <span className="text-[10px]">Irmãos</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('perfil')}
@@ -336,7 +506,7 @@ export default function App() {
           }`}
         >
           <UserCircle className="w-5 h-5" />
-          <span className="text-[11px]">Perfil</span>
+          <span className="text-[10px]">Perfil</span>
         </button>
       </nav>
 

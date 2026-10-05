@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { canInteract, getUserRole, ROLES } from '../utils/roles';
 import { 
   Image as ImageIcon, 
   Video as VideoIcon, 
@@ -15,12 +16,18 @@ import {
   MessageCircle,
   Clock,
   CornerDownRight,
-  MessageSquare
+  MessageSquare,
+  Eye,
+  Crown,
+  Flame
 } from 'lucide-react';
 
 export default function FeedView({ user, profile }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const userCanInteract = canInteract(user, profile);
+  const userRole = getUserRole(user, profile);
 
   // Estado do formulário de nova postagem
   const [caption, setCaption] = useState('');
@@ -160,6 +167,11 @@ export default function FeedView({ user, profile }) {
   const handlePublishPost = async (e) => {
     e.preventDefault();
 
+    if (!userCanInteract) {
+      alert('Usuários da classe Pagão só podem visualizar o Mural. Para publicar, aguarde a bênção do Profeta!');
+      return;
+    }
+
     if (!canPublish) {
       alert('Digite uma mensagem ou selecione uma foto/vídeo para compartilhar.');
       return;
@@ -261,6 +273,11 @@ export default function FeedView({ user, profile }) {
   // Alternar Reação Sacra ('amen' | 'flame' | 'heart') com otimismo na UI
   const handleToggleReaction = async (postId, reactionType) => {
     try {
+      if (!userCanInteract) {
+        alert('Usuários da classe Pagão podem apenas visualizar o Mural. Para reagir, aguarde a bênção do Profeta!');
+        return;
+      }
+
       const { data: authData } = await supabase.auth.getUser();
       const currentUser = authData?.user || user;
 
@@ -343,6 +360,11 @@ export default function FeedView({ user, profile }) {
   // Enviar novo comentário no post
   const handleAddComment = async (postId, e) => {
     if (e) e.preventDefault();
+
+    if (!userCanInteract) {
+      alert('Apenas membros da classe Filomenos e o Profeta podem comentar.');
+      return;
+    }
 
     const text = (commentInputs[postId] || '').trim();
     if (!text) return;
@@ -527,123 +549,145 @@ export default function FeedView({ user, profile }) {
   return (
     <div className="max-w-xl mx-auto space-y-6">
 
-      {/* ÁREA DE NOVA PUBLICAÇÃO (CRIAR POST - FLEXÍVEL: TEXTO, MÍDIA OU AMBOS) */}
-      <div className="bg-white dark:bg-[#1A1D21] border border-amber-900/10 dark:border-amber-500/10 rounded-3xl p-5 md:p-6 shadow-sm space-y-4">
-        
-        {/* Cabeçalho do Card */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-cenaculo-crimson/20 dark:border-cenaculo-gold/30 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold shadow-xs">
-            {userAvatar ? (
-              <img src={userAvatar} alt="Meu Avatar" className="w-full h-full object-cover" />
-            ) : (
-              <User className="w-5 h-5 text-slate-400" />
-            )}
+      {/* ÁREA DE NOVA PUBLICAÇÃO (Apenas Filomenos e Profeta) */}
+      {!userCanInteract ? (
+        <div className="bg-white dark:bg-[#1A1D21] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-sm flex items-start gap-4">
+          <div className="w-11 h-11 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-slate-500 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
+            <Eye className="w-5 h-5 text-slate-400" />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>{userName}</span>
-              <Sparkles className="w-3.5 h-3.5 text-cenaculo-gold" />
-            </h3>
-            <p className="text-[11px] text-slate-400">
-              Compartilhe uma graça, foto, vídeo ou oração com a turma
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                Mural do Cenáculo
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                Modo Observador • Classe Pagão
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Você pode visualizar todas as bênçãos, fotos e orações compartilhadas pela turma. 
+              Para poder compartilhar momentos, reagir e comentar, aguarde o <strong>Profeta</strong> conceder a bênção da classe <strong>Filomenos</strong> à sua conta.
             </p>
           </div>
         </div>
-
-        {/* Formulário */}
-        <form onSubmit={handlePublishPost} className="space-y-4">
+      ) : (
+        <div className="bg-white dark:bg-[#1A1D21] border border-amber-900/10 dark:border-amber-500/10 rounded-3xl p-5 md:p-6 shadow-sm space-y-4">
           
-          <div>
-            <textarea
-              rows={3}
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="Compartilhe um momento, foto, vídeo ou oração dos nossos encontros..."
-              disabled={isPublishing}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cenaculo-crimson dark:focus:ring-cenaculo-gold text-sm resize-none transition-all"
-            />
+          {/* Cabeçalho do Card */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-cenaculo-crimson/20 dark:border-cenaculo-gold/30 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold shadow-xs">
+              {userAvatar ? (
+                <img src={userAvatar} alt="Meu Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-5 h-5 text-slate-400" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span>{userName}</span>
+                <Sparkles className="w-3.5 h-3.5 text-cenaculo-gold" />
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Compartilhe uma graça, foto, vídeo ou oração com a turma
+              </p>
+            </div>
           </div>
 
-          {/* Pré-visualização da Mídia Escolhida */}
-          {mediaPreview && (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black group max-h-[360px] flex items-center justify-center">
-              {mediaType === 'video' ? (
-                <video 
-                  src={mediaPreview} 
-                  controls 
-                  playsInline 
-                  className="w-full max-h-[360px] rounded-2xl object-contain bg-black" 
-                />
-              ) : (
-                <img 
-                  src={mediaPreview} 
-                  alt="Pré-visualização" 
-                  className="w-full max-h-[360px] object-contain rounded-2xl" 
-                />
-              )}
+          {/* Formulário */}
+          <form onSubmit={handlePublishPost} className="space-y-4">
+            
+            <div>
+              <textarea
+                rows={3}
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Compartilhe um momento, foto, vídeo ou oração dos nossos encontros..."
+                disabled={isPublishing}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cenaculo-crimson dark:focus:ring-cenaculo-gold text-sm resize-none transition-all"
+              />
+            </div>
+
+            {/* Pré-visualização da Mídia Escolhida */}
+            {mediaPreview && (
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black group max-h-[360px] flex items-center justify-center">
+                {mediaType === 'video' ? (
+                  <video 
+                    src={mediaPreview} 
+                    controls 
+                    playsInline 
+                    className="w-full max-h-[360px] rounded-2xl object-contain bg-black" 
+                  />
+                ) : (
+                  <img 
+                    src={mediaPreview} 
+                    alt="Pré-visualização" 
+                    className="w-full max-h-[360px] object-contain rounded-2xl" 
+                  />
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleClearMedia}
+                  disabled={isPublishing}
+                  title="Remover mídia"
+                  className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white transition-colors backdrop-blur-sm shadow-md cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="absolute bottom-2 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1.5">
+                  {mediaType === 'video' ? <VideoIcon className="w-3 h-3 text-cenaculo-gold" /> : <ImageIcon className="w-3 h-3 text-cenaculo-gold" />}
+                  {mediaFile?.name}
+                </div>
+              </div>
+            )}
+
+            {/* Barra de Ações: Selecionar Arquivo + Botão Postar */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileChange}
+                disabled={isPublishing}
+                className="hidden"
+                id="mural-media-input"
+              />
+
+              <label
+                htmlFor="mural-media-input"
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                  mediaFile 
+                    ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800' 
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                } ${isPublishing ? 'pointer-events-none opacity-50' : ''}`}
+              >
+                <FilePlus2 className="w-4 h-4 text-cenaculo-crimson dark:text-cenaculo-gold" />
+                <span>{mediaFile ? 'Trocar Foto/Vídeo' : 'Adicionar Foto ou Vídeo'}</span>
+              </label>
 
               <button
-                type="button"
-                onClick={handleClearMedia}
-                disabled={isPublishing}
-                title="Remover mídia"
-                className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white transition-colors backdrop-blur-sm shadow-md cursor-pointer"
+                type="submit"
+                disabled={isPublishing || !canPublish}
+                className="py-2.5 px-5 rounded-xl bg-cenaculo-crimson hover:bg-cenaculo-crimsonDark dark:bg-cenaculo-gold dark:text-slate-950 text-white font-semibold text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                {isPublishing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{statusMsg || 'Publicando...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Publicar</span>
+                  </>
+                )}
               </button>
-
-              <div className="absolute bottom-2 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1.5">
-                {mediaType === 'video' ? <VideoIcon className="w-3 h-3 text-cenaculo-gold" /> : <ImageIcon className="w-3 h-3 text-cenaculo-gold" />}
-                {mediaFile?.name}
-              </div>
             </div>
-          )}
-
-          {/* Barra de Ações: Selecionar Arquivo + Botão Postar */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*"
-              onChange={handleFileChange}
-              disabled={isPublishing}
-              className="hidden"
-              id="mural-media-input"
-            />
-
-            <label
-              htmlFor="mural-media-input"
-              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                mediaFile 
-                  ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800' 
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-              } ${isPublishing ? 'pointer-events-none opacity-50' : ''}`}
-            >
-              <FilePlus2 className="w-4 h-4 text-cenaculo-crimson dark:text-cenaculo-gold" />
-              <span>{mediaFile ? 'Trocar Foto/Vídeo' : 'Adicionar Foto ou Vídeo'}</span>
-            </label>
-
-            <button
-              type="submit"
-              disabled={isPublishing || !canPublish}
-              className="py-2.5 px-5 rounded-xl bg-cenaculo-crimson hover:bg-cenaculo-crimsonDark dark:bg-cenaculo-gold dark:text-slate-950 text-white font-semibold text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 cursor-pointer"
-            >
-              {isPublishing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{statusMsg || 'Publicando...'}</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  <span>Publicar</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
+      )}
 
       {/* FEED DE PUBLICAÇÕES */}
       <div className="space-y-4">
@@ -959,38 +1003,44 @@ export default function FeedView({ user, profile }) {
                   </div>
 
                   {/* Formulário de Envio de Comentário */}
-                  <form 
-                    onSubmit={(e) => handleAddComment(post.id, e)}
-                    className="flex items-center gap-2 pt-1"
-                  >
-                    <input
-                      type="text"
-                      placeholder="Escreva uma mensagem fraterna..."
-                      value={currentCommentText}
-                      onChange={(e) => setCommentInputs((prev) => ({ ...prev, [post.id]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleAddComment(post.id);
-                        }
-                      }}
-                      disabled={isSubmittingThisComment}
-                      className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-cenaculo-crimson dark:focus:ring-cenaculo-gold transition-all"
-                    />
-
-                    <button
-                      type="submit"
-                      disabled={isSubmittingThisComment || !currentCommentText.trim()}
-                      className="p-2 rounded-xl bg-cenaculo-crimson hover:bg-cenaculo-crimsonDark dark:bg-cenaculo-gold dark:text-slate-950 text-white transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      title="Enviar comentário"
+                  {!userCanInteract ? (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                      🔒 Apenas membros da classe Filomenos e o Profeta podem comentar.
+                    </div>
+                  ) : (
+                    <form 
+                      onSubmit={(e) => handleAddComment(post.id, e)}
+                      className="flex items-center gap-2 pt-1"
                     >
-                      {isSubmittingThisComment ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Send className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </form>
+                      <input
+                        type="text"
+                        placeholder="Escreva uma mensagem fraterna..."
+                        value={currentCommentText}
+                        onChange={(e) => setCommentInputs((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAddComment(post.id);
+                          }
+                        }}
+                        disabled={isSubmittingThisComment}
+                        className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-cenaculo-crimson dark:focus:ring-cenaculo-gold transition-all"
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingThisComment || !currentCommentText.trim()}
+                        className="p-2 rounded-xl bg-cenaculo-crimson hover:bg-cenaculo-crimsonDark dark:bg-cenaculo-gold dark:text-slate-950 text-white transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Enviar comentário"
+                      >
+                        {isSubmittingThisComment ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </form>
+                  )}
                 </div>
               )}
 
